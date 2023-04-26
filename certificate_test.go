@@ -1,10 +1,11 @@
 // Copyright 2023 Brendan Abolivier
+// Copyright 2023 Unwired Networks GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,9 +27,9 @@ func TestCertificateFullChainInOrder(t *testing.T) {
 	chain := NewCertChain()
 
 	chainPaths := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
-		"test_data/full_chain/cert.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
+		"test_data/algorithms/rsa/cert.pem",
 	}
 
 	// Read the certificate Bytes from the files.
@@ -44,7 +45,7 @@ func TestCertificateFullChainInOrder(t *testing.T) {
 			t.Fatalf("Failed to add cert to chain: %s", err.Error())
 		}
 
-		// Test that the chain was correctly initialised from the first certificate.
+		// Test that the chain was correctly initialized from the first certificate.
 		if chain.Root == nil || chain.FurthestLeaf == nil {
 			t.Fatal("Chain did not initialise correctly")
 		}
@@ -71,16 +72,16 @@ func TestCertificateFullChainInOrder(t *testing.T) {
 func TestCertificateFullChainOutOfOrder(t *testing.T) {
 	chain := NewCertChain()
 
-	rootPath := "test_data/full_chain/ca.pem"
-	intermediatePath := "test_data/full_chain/intermediate.pem"
-	clientPath := "test_data/full_chain/cert.pem"
+	rootPath := "test_data/algorithms/rsa/ca.pem"
+	intermediatePath := "test_data/algorithms/rsa/intermediate.pem"
+	clientPath := "test_data/algorithms/rsa/cert.pem"
 
 	chainPaths := []string{rootPath, intermediatePath, clientPath}
 
 	// Read the certificate bytes from the files.
 	certs := testReadCertsFromFiles(t, chainPaths)
 
-	// First add the root certificate, check that the chain was initialised correctly.
+	// First add the root certificate, check that the chain was initialized correctly.
 	if err := chain.AddFromBytes(certs[rootPath], &rootPath); err != nil {
 		t.Fatalf("Failed to add cert to chain: %s", err.Error())
 	}
@@ -139,16 +140,16 @@ func TestCertificateFullChainOutOfOrder(t *testing.T) {
 func TestCertificateFullChainOutOfOrderIntermediateFirst(t *testing.T) {
 	chain := NewCertChain()
 
-	rootPath := "test_data/full_chain/ca.pem"
-	intermediatePath := "test_data/full_chain/intermediate.pem"
-	clientPath := "test_data/full_chain/cert.pem"
+	rootPath := "test_data/algorithms/rsa/ca.pem"
+	intermediatePath := "test_data/algorithms/rsa/intermediate.pem"
+	clientPath := "test_data/algorithms/rsa/cert.pem"
 
 	chainPaths := []string{rootPath, intermediatePath, clientPath}
 
 	// Read the certificate bytes from the files.
 	certs := testReadCertsFromFiles(t, chainPaths)
 
-	// First add the intermediate certificate, check that the chain was initialised
+	// First add the intermediate certificate, check that the chain was initialized
 	// correctly.
 	if err := chain.AddFromBytes(certs[intermediatePath], &intermediatePath); err != nil {
 		t.Fatalf("Failed to add cert to chain: %s", err.Error())
@@ -192,8 +193,8 @@ func TestCertificateMultipleChains(t *testing.T) {
 	chain := NewCertChain()
 
 	rootPath := "test_data/multiple_chains/ca.pem"
-	intermediatePath1 := "test_data/multiple_chains/intermediate-ca1.pem"
-	intermediatePath2 := "test_data/multiple_chains/intermediate-ca2.pem"
+	intermediatePath1 := "test_data/multiple_chains/chain-1-intermediate.pem"
+	intermediatePath2 := "test_data/multiple_chains/chain-2-intermediate.pem"
 
 	chainPaths := []string{rootPath, intermediatePath1, intermediatePath2}
 
@@ -257,8 +258,8 @@ func TestCertificateDuplicateCertificates(t *testing.T) {
 // another and does not return a false positive when it's not.
 func TestCertificateIsSignedBy(t *testing.T) {
 	chainPaths := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
 	}
 
 	// Read the certificate bytes from the files.
@@ -281,8 +282,8 @@ func TestCertificateIsSignedBy(t *testing.T) {
 // Tests that certificate.SetLeaf correctly sets the leaf and parent of certificates.
 func TestCertificateSetLeaf(t *testing.T) {
 	chainPaths := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
 	}
 
 	// Read the certificate bytes from the files.
@@ -356,22 +357,25 @@ func TestCertificateCacheKey(t *testing.T) {
 
 // Tests that NewCertificate correctly returns an error if the algorithm for the
 // certificate's public key is not RSA.
-func TestCertificateNonRSA(t *testing.T) {
+func TestCertificateECDSA(t *testing.T) {
 	// Read the certificate.
-	x509Cert := testParseX509CertFromFile(t, "test_data/ecdsa/cert.pem")
+	x509Cert := testParseX509CertFromFile(t, "test_data/algorithms/ecdsa/cert.pem")
 
 	// Test that NewCertificate correctly returns an error.
-	_, err := NewCertificate(x509Cert, nil)
-	if err != ErrCertificatePKeyAlgoNotRSA {
-		t.Fatalf("Expected error on non-RSA algo, got: %v", err)
+	cert, err := NewCertificate(x509Cert, nil)
+	if err != nil {
+		t.Fatalf("expected no error: %v", err)
+	}
+	if cert.C.PublicKeyAlgorithm != x509.ECDSA {
+		t.Fatalf("expected ECDSA cert type, got: %v", cert.Type)
 	}
 }
 
 // Tests that NewCertificate associates the correct type to a certificate.
 func TestCertificateTypeAssignment(t *testing.T) {
-	testParseCertAndCheckType(t, "test_data/full_chain/ca.pem", CertTypeRootCA)
-	testParseCertAndCheckType(t, "test_data/full_chain/intermediate.pem", CertTypeIntermediateCA)
-	testParseCertAndCheckType(t, "test_data/full_chain/cert.pem", CertTypeClientCert)
+	testParseCertAndCheckType(t, "test_data/algorithms/rsa/ca.pem", CertTypeRootCA)
+	testParseCertAndCheckType(t, "test_data/algorithms/rsa/intermediate.pem", CertTypeIntermediateCA)
+	testParseCertAndCheckType(t, "test_data/algorithms/rsa/cert.pem", CertTypeClientCert)
 }
 
 // testReadCertsFromFiles reads the PEM files at the given paths and returns a map

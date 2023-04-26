@@ -1,10 +1,11 @@
 // Copyright 2023 Brendan Abolivier
+// Copyright 2023 Unwired Networks GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,11 +16,12 @@ package certsort
 
 import (
 	"bytes"
-	"crypto/rsa"
+	"crypto"
 	"crypto/x509"
 	"encoding/pem"
 	"os"
 	"path"
+	"strings"
 	"testing"
 )
 
@@ -28,9 +30,9 @@ import (
 func TestWriteIntermediateToBuffer(t *testing.T) {
 	buf := new(bytes.Buffer)
 	files := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
-		"test_data/full_chain/cert.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
+		"test_data/algorithms/rsa/cert.pem",
 	}
 
 	// Populate a chain from the files.
@@ -71,7 +73,7 @@ func TestWriteIntermediateToBuffer(t *testing.T) {
 func TestWriteIntermediateToBufferMissing(t *testing.T) {
 	buf := new(bytes.Buffer)
 	files := []string{
-		"test_data/full_chain/cert.pem",
+		"test_data/algorithms/rsa/cert.pem",
 	}
 
 	// Populate a chain from the file.
@@ -88,7 +90,7 @@ func TestWriteIntermediateToBufferMissing(t *testing.T) {
 
 	// Check that the buffer is empty.
 	if buf.Len() != 0 {
-		t.Fatalf("Unexpected Bytes in buffer: %s", string(buf.Bytes()))
+		t.Fatalf("Unexpected Bytes in buffer: %s", buf.String())
 	}
 }
 
@@ -97,7 +99,7 @@ func TestWriteIntermediateToBufferMissing(t *testing.T) {
 func TestWriteIntermediateToBufferMissingMandatory(t *testing.T) {
 	buf := new(bytes.Buffer)
 	files := []string{
-		"test_data/full_chain/cert.pem",
+		"test_data/algorithms/rsa/cert.pem",
 	}
 
 	// Populate a chain from the file.
@@ -174,9 +176,9 @@ func TestWriteFileRootCA(t *testing.T) {
 
 	// Build the certificate chain.
 	files := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
-		"test_data/full_chain/cert.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
+		"test_data/algorithms/rsa/cert.pem",
 	}
 
 	chain, key, err := GetChainAndKeyFromPEMFiles(files)
@@ -184,15 +186,13 @@ func TestWriteFileRootCA(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Write the output file.
-	outputDir := t.TempDir()
-
-	if err = writeFile(outputDir, cfg, chain, key); err != nil {
+	buf, err := writeToBufferSorted(cfg, chain, key)
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Check that the written file matches the expected result.
-	testAssertCertFromFileEqual(t, path.Join(outputDir, fileName), chain.Root)
+	testAssertCertFromBufferEqual(t, buf, chain.Root)
 }
 
 // Tests that writeFile correctly returns an error when writing a root CA certificate is
@@ -210,8 +210,8 @@ func TestWriteFileRootCAMissingMandatory(t *testing.T) {
 
 	// Build the chain.
 	files := []string{
-		"test_data/full_chain/intermediate.pem",
-		"test_data/full_chain/cert.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
+		"test_data/algorithms/rsa/cert.pem",
 	}
 
 	chain, key, err := GetChainAndKeyFromPEMFiles(files)
@@ -219,10 +219,7 @@ func TestWriteFileRootCAMissingMandatory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Attempt to write the file, and check that an error is returned.
-	outputDir := t.TempDir()
-
-	if err = writeFile(outputDir, cfg, chain, key); err != ErrMissingRootCA {
+	if _, err = writeToBufferSorted(cfg, chain, key); err != ErrMissingRootCA {
 		t.Fatalf("Expected error: %v\nGot: %v", ErrMissingRootCA, err)
 	}
 }
@@ -242,9 +239,9 @@ func TestWriteFileIntermediateCA(t *testing.T) {
 
 	// Build the chain.
 	files := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
-		"test_data/full_chain/cert.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
+		"test_data/algorithms/rsa/cert.pem",
 	}
 
 	chain, key, err := GetChainAndKeyFromPEMFiles(files)
@@ -252,16 +249,14 @@ func TestWriteFileIntermediateCA(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Write the output file.
-	outputDir := t.TempDir()
-
-	if err = writeFile(outputDir, cfg, chain, key); err != nil {
+	buf, err := writeToBufferSorted(cfg, chain, key)
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Check that the written file matches the expected result.
 	intermediate := chain.Root.Leaf
-	testAssertCertFromFileEqual(t, path.Join(outputDir, fileName), intermediate)
+	testAssertCertFromBufferEqual(t, buf, intermediate)
 }
 
 // Tests that writeFile correctly returns an error when writing an intermediate CA
@@ -281,7 +276,7 @@ func TestWriteFileIntermediateCAMissingMandatory(t *testing.T) {
 	// chose to include the client-facing certificate) since otherwise
 	// GetChainAndKeyFromPEMFiles will detect an interruption in the chain and error.
 	files := []string{
-		"test_data/full_chain/ca.pem",
+		"test_data/algorithms/rsa/ca.pem",
 	}
 
 	chain, key, err := GetChainAndKeyFromPEMFiles(files)
@@ -290,9 +285,7 @@ func TestWriteFileIntermediateCAMissingMandatory(t *testing.T) {
 	}
 
 	// Attempt to write the file, and check that an error is returned.
-	outputDir := t.TempDir()
-
-	if err = writeFile(outputDir, cfg, chain, key); err != ErrMissingIntermediateCA {
+	if _, err := writeToBufferSorted(cfg, chain, key); err != ErrMissingIntermediateCA {
 		t.Fatalf("Expected error: %v\nGot: %v", ErrMissingIntermediateCA, err)
 	}
 }
@@ -312,9 +305,9 @@ func TestWriteFileClientCert(t *testing.T) {
 
 	// Build the chain.
 	files := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
-		"test_data/full_chain/cert.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
+		"test_data/algorithms/rsa/cert.pem",
 	}
 
 	chain, key, err := GetChainAndKeyFromPEMFiles(files)
@@ -322,15 +315,13 @@ func TestWriteFileClientCert(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Write the output file.
-	outputDir := t.TempDir()
-
-	if err = writeFile(outputDir, cfg, chain, key); err != nil {
+	buf, err := writeToBufferSorted(cfg, chain, key)
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Check that the written file matches the expected result.
-	testAssertCertFromFileEqual(t, path.Join(outputDir, fileName), chain.FurthestLeaf)
+	testAssertCertFromBufferEqual(t, buf, chain.FurthestLeaf)
 }
 
 // Tests that writeFile correctly returns an error when writing a client-facing
@@ -348,8 +339,8 @@ func TestWriteFileClientCertMissingMandatory(t *testing.T) {
 
 	// Build the chain.
 	files := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
 	}
 
 	chain, key, err := GetChainAndKeyFromPEMFiles(files)
@@ -358,9 +349,8 @@ func TestWriteFileClientCertMissingMandatory(t *testing.T) {
 	}
 
 	// Attempt to write the file, and check that an error is returned.
-	outputDir := t.TempDir()
 
-	if err = writeFile(outputDir, cfg, chain, key); err != ErrMissingClientCert {
+	if _, err = writeToBufferSorted(cfg, chain, key); err != ErrMissingClientCert {
 		t.Fatalf("Expected error: %v\nGot: %v", ErrMissingClientCert, err)
 	}
 }
@@ -380,10 +370,10 @@ func TestWriteFileClientKey(t *testing.T) {
 
 	// Build the chain, and identify the key.
 	files := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
-		"test_data/full_chain/cert.pem",
-		"test_data/full_chain/key.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
+		"test_data/algorithms/rsa/cert.pem",
+		"test_data/algorithms/rsa/key.pem",
 	}
 
 	chain, key, err := GetChainAndKeyFromPEMFiles(files)
@@ -391,15 +381,13 @@ func TestWriteFileClientKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Write the output file.
-	outputDir := t.TempDir()
-
-	if err = writeFile(outputDir, cfg, chain, key); err != nil {
+	buf, err := writeToBufferSorted(cfg, chain, key)
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Check that the written file matches the expected result.
-	testAssertKeyFromFileEqual(t, path.Join(outputDir, fileName), key)
+	testAssertKeyFromBufferEqual(t, buf, key)
 }
 
 // Tests that writeFile correctly returns an error when writing a key for the client-facing
@@ -417,9 +405,9 @@ func TestWriteFileClientKeyMissingMandatory(t *testing.T) {
 
 	// Build the chain.
 	files := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
-		"test_data/full_chain/cert.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
+		"test_data/algorithms/rsa/cert.pem",
 	}
 
 	chain, key, err := GetChainAndKeyFromPEMFiles(files)
@@ -428,48 +416,107 @@ func TestWriteFileClientKeyMissingMandatory(t *testing.T) {
 	}
 
 	// Attempt to write the file, and check that an error is returned.
-	outputDir := t.TempDir()
 
-	if err = writeFile(outputDir, cfg, chain, key); err != ErrMissingPrivateKey {
+	if _, err = writeToBufferSorted(cfg, chain, key); err != ErrMissingPrivateKey {
 		t.Fatalf("Expected error: %v\nGot: %v", ErrMissingPrivateKey, err)
 	}
 }
 
 // Tests that SortCertificates correctly sorts certificates accordingly with the provided
 // input string.
+// Tests different supported algorithms.
 func TestSortCertificates(t *testing.T) {
 	// Define the configuration string and files.
 	config := "root.pem:ca_root!;intermediate.pem:ca_intermediates_root_to_leaf!;cert.pem:cert!;key.pem:private_key!"
+
+	var algorithms = []struct {
+		name string
+	}{
+		{"ecdh"},
+		{"ecdsa"},
+		{"ed25519"},
+		{"rsa"},
+		{"rsa-pkcs8"},
+	}
+
+	for _, algo := range algorithms {
+		t.Run("Key_"+algo.name, func(t *testing.T) {
+			files := []string{
+				"test_data/algorithms/" + algo.name + "/ca.pem",
+				"test_data/algorithms/" + algo.name + "/intermediate.pem",
+				"test_data/algorithms/" + algo.name + "/cert.pem",
+				"test_data/algorithms/" + algo.name + "/key.pem",
+			}
+
+			// Set up the output directory.
+			outputDir := t.TempDir()
+
+			// Sort the files.
+			if err := SortCertificateFiles(config, files, outputDir); err != nil {
+				t.Fatal(err)
+			}
+
+			// Separately load the certificates and key from the input files.
+			chain, key, err := GetChainAndKeyFromPEMFiles(files)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			root := chain.Root
+			intermediate := chain.Root.Leaf
+			cert := chain.FurthestLeaf
+
+			// Check that the output files match the expected results.
+			testAssertCertFromFileEqual(t, path.Join(outputDir, "root.pem"), root)
+			testAssertCertFromFileEqual(t, path.Join(outputDir, "intermediate.pem"), intermediate)
+			testAssertCertFromFileEqual(t, path.Join(outputDir, "cert.pem"), cert)
+			testAssertKeyFromFileEqual(t, path.Join(outputDir, "key.pem"), key)
+		})
+	}
+}
+
+// Tests that SortCertificates correctly sorts certificates accordingly with the provided
+// input string and checks if the order within a file is always correct.
+// This ensures that the sorting is deterministic.
+func TestSortCertificatesOrder(t *testing.T) {
+	// Define the configuration string and files.
+	config := "ca.pem:ca_root!,ca_intermediates_root_to_leaf!;cert.pem:cert!;key.pem:private_key!"
 	files := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
-		"test_data/full_chain/cert.pem",
-		"test_data/full_chain/key.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
+		"test_data/algorithms/rsa/cert.pem",
+		"test_data/algorithms/rsa/key.pem",
 	}
 
-	// Set up the output directory.
-	outputDir := t.TempDir()
+	tries := 10
+	matches := 0
+	for i := 0; i < tries; i++ {
+		// Set up the output directory.
+		outputDir := t.TempDir()
 
-	// Sort the files.
-	if err := SortCertificates(config, files, outputDir); err != nil {
-		t.Fatal(err)
+		// Sort the files.
+		if err := SortCertificateFiles(config, files, outputDir); err != nil {
+			t.Fatal(err)
+		}
+
+		b, err := os.ReadFile(path.Join(outputDir, "ca.pem"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		expectedFirstLine := "MIIDSTCCAjGgAwIBAgIBBzANBgkqhkiG9w0BAQsFADA6MQswCQYDVQQGEwJBVDEZ"
+
+		// checks if the order is correct
+		lines := strings.Split(string(b), "\n")
+		if lines[1] == expectedFirstLine {
+			matches++
+		} else {
+			t.Errorf("first line should be %v, but was %v", expectedFirstLine, lines[1])
+		}
 	}
-
-	// Separately load the certificates and key from the input files.
-	chain, key, err := GetChainAndKeyFromPEMFiles(files)
-	if err != nil {
-		t.Fatal(err)
+	if tries != matches {
+		t.Errorf("ordering is wrong in %v of %v tries", tries-matches, tries)
 	}
-
-	root := chain.Root
-	intermediate := chain.Root.Leaf
-	cert := chain.FurthestLeaf
-
-	// Check that the output files match the expected results.
-	testAssertCertFromFileEqual(t, path.Join(outputDir, "root.pem"), root)
-	testAssertCertFromFileEqual(t, path.Join(outputDir, "intermediate.pem"), intermediate)
-	testAssertCertFromFileEqual(t, path.Join(outputDir, "cert.pem"), cert)
-	testAssertKeyFromFileEqual(t, path.Join(outputDir, "key.pem"), key)
 }
 
 // testAssertCertFromFileEqual checks that the certificate that is PEM-encoded at the
@@ -482,37 +529,76 @@ func testAssertCertFromFileEqual(t *testing.T, path string, expected *Certificat
 	}
 }
 
+// testAssertCertFromBufferEqual checks that the certificate that is PEM-encoded in the
+// given buffer corresponds to the expected certificate.
+func testAssertCertFromBufferEqual(t *testing.T, buf *bytes.Buffer, expected *Certificate) {
+	block, _ := pem.Decode(buf.Bytes())
+
+	// Parse the bytes as an X509 certificate.
+	x509Cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !x509Cert.Equal(expected.C) {
+		t.Fatalf("Certificate in buffer did not match the expected certificate")
+	}
+}
+
 // testAssertKeyFromFileEqual checks that the private key that is PEM-encoded at the given
 // path corresponds to the expected private key.
-func testAssertKeyFromFileEqual(t *testing.T, path string, expected *rsa.PrivateKey) {
+func testAssertKeyFromFileEqual(t *testing.T, path string, expected crypto.PrivateKey) {
 	// Read the file bytes.
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	testAssertKeyFromBufferEqual(t, bytes.NewBuffer(b), expected)
+}
 
+type keyType interface {
+	Equal(crypto.PrivateKey) bool
+}
+
+func testAssertKeyFromBufferEqual(t *testing.T, buf *bytes.Buffer, expected crypto.PrivateKey) {
 	// Decode the PEM block.
-	block, rest := pem.Decode(b)
+	block, rest := pem.Decode(buf.Bytes())
 	if block == nil {
-		t.Fatalf("Empty PEM file: %s", path)
+		t.Fatalf("Empty PEM file: %s", buf.String())
 	}
 	if len(rest) != 0 {
-		t.Fatalf("More than one PEM block in file: %s", path)
+		t.Fatalf("More than one PEM block in file: %s", buf.String())
 	}
 
-	// Check the type of the block.
-	if block.Type != PEMBlockTypeRSAKey {
-		t.Fatalf("Unexpected block type: %s", block.Type)
-	}
+	var privateKey keyType
 
-	// Parse the key encoded in the block.
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		t.Fatal(err)
+	if block.Type == "PRIVATE KEY" {
+		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		privateKey = key.(keyType)
+	}
+	if block.Type == "EC PRIVATE KEY" {
+		key, err := x509.ParseECPrivateKey(block.Bytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		privateKey = keyType(key)
+	}
+	if block.Type == "RSA PRIVATE KEY" {
+		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		privateKey = keyType(key)
+	}
+	if privateKey == nil {
+		t.Fatalf("Unknown private key type: %s", block.Type)
 	}
 
 	// Compare the decoded key with the expected result.
-	if !key.Equal(expected) {
-		t.Fatalf("Key in file %s did not match the expected certificate", path)
+	if !privateKey.Equal(expected) {
+		t.Fatalf("Key in file %s did not match the expected certificate", buf.String())
 	}
 }

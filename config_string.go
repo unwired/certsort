@@ -1,10 +1,11 @@
 // Copyright 2023 Brendan Abolivier
+// Copyright 2023 Unwired Networks GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,6 +38,10 @@ const (
 	// client-facing certificate.
 	CTPrivateKey
 )
+
+// ctLength must always be the length of possible content tags
+// Used to do stable iterations over a ContentTag map.
+const ctLength = int(CTPrivateKey) + 1
 
 // ErrEmptyConfigurationString is returned when trying to parse a configuration string
 // that is an empty string.
@@ -96,7 +101,7 @@ func (cfg *OutputFileConfig) parseAndStoreContentValues(cv string) error {
 
 // configStringFileFormat represents the format used to describe a single file in the
 // configuration string.
-var configStringFileFormat = regexp.MustCompile("^([\\w.]+):([\\w,!]+)$")
+var configStringFileFormat = regexp.MustCompile(`^([\w.]+):([\w,!]+)$`)
 
 // parseConfigurationString parses the given configuration string into a slice that
 // represents all the output files and their configuration.

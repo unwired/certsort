@@ -1,10 +1,11 @@
 // Copyright 2023 Brendan Abolivier
+// Copyright 2023 Unwired Networks GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,7 +15,7 @@
 package certsort
 
 import (
-	"crypto/rsa"
+	"crypto"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -36,12 +37,12 @@ var (
 	// detected. For example, if certificates A and B are both parents of certificate C,
 	// or if certificates B and C are both leaves of certificate A.
 	ErrParallelChains = errors.New("multiple parallel verification chains detected")
-	// ErrCertificatePKeyAlgoNotRSA is returned when trying to process a certificate which
-	// public key's algorithm is not RSA.
-	ErrCertificatePKeyAlgoNotRSA = fmt.Errorf("algorithm of public key for certificate is not RSA")
 	// ErrNilLeafCertificate is returned when trying to set a nil certificate as the leaf
 	// of another certificate.
 	ErrNilLeafCertificate = fmt.Errorf("proposed leaf certificate is nil")
+	// ErrCertificatePKeyAlgoUnsupported is returned when trying to instantiate a
+	// Certificate with a public key algorithm that is not supported.
+	ErrCertificatePKeyAlgoUnsupported = fmt.Errorf("certificate's public key algorithm is not supported")
 )
 
 // Certificate is a node in a CertChain which wraps around an X509 certificate.
@@ -64,15 +65,16 @@ type Certificate struct {
 // Also takes a label, which is associated to the certificate for use in testing.
 // Returns an error if the public key's algorithm is not supported.
 func NewCertificate(cert *x509.Certificate, label *string) (*Certificate, error) {
-	// Check that the public key algorithm is RSA, which is the only supported algorithm.
-	if cert.PublicKeyAlgorithm != x509.RSA {
-		return nil, ErrCertificatePKeyAlgoNotRSA
-	}
-
 	// Instantiate a new certificate.
 	c := &Certificate{
 		C:     cert,
 		label: label,
+	}
+
+	// Check that the certificate's public key algorithm is supported.
+	// We do not support DSA keys, as they are considered deprecated because of their low security.
+	if cert.PublicKeyAlgorithm == x509.UnknownPublicKeyAlgorithm || cert.PublicKeyAlgorithm == x509.DSA {
+		return nil, ErrCertificatePKeyAlgoUnsupported
 	}
 
 	// Infers the type of the certificate based on its signature and its CA flag.
@@ -136,11 +138,11 @@ func (c *Certificate) SetLeaf(l *Certificate) error {
 
 }
 
-// PublicKey returns the public RSA key for the current certificate.
-func (c *Certificate) PublicKey() *rsa.PublicKey {
+// PublicKey returns the public key for the current certificate.
+func (c *Certificate) PublicKey() crypto.PublicKey {
 	// We should be able to correctly assert the type of the public key here since
-	// NewCertificate ensures the key algorithm for the certificate is RSA.
-	return c.C.PublicKey.(*rsa.PublicKey)
+	// we've already checked that the algorithm is supported in NewCertificate.
+	return c.C.PublicKey
 }
 
 // CertChain represents a linear linked chain of x509 certificates in which each
