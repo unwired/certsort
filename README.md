@@ -1,6 +1,6 @@
 # Certificate sorting
 
-This library can read X509 certificates and RSA private keys contained in a list of files,
+This library can read X509 certificates and private keys contained in a list of files,
 order them, and sort them into output files specified by a configuration string.
 
 ## Usage
