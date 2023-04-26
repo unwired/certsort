@@ -1,10 +1,11 @@
 // Copyright 2023 Brendan Abolivier
+// Copyright 2023 Unwired Networks GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,7 +15,7 @@
 package certsort
 
 import (
-	"crypto/rsa"
+	"crypto"
 	"crypto/x509"
 	"encoding/pem"
 	"os"
@@ -26,10 +27,10 @@ import (
 // in the correct order, as well as said key.
 func TestPEMReadFiles(t *testing.T) {
 	filePaths := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/intermediate.pem",
-		"test_data/full_chain/cert.pem",
-		"test_data/full_chain/key.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/intermediate.pem",
+		"test_data/algorithms/rsa/cert.pem",
+		"test_data/algorithms/rsa/key.pem",
 	}
 
 	// Read and parse the files.
@@ -49,11 +50,38 @@ func TestPEMReadFiles(t *testing.T) {
 	}
 }
 
+// Tests that if given a full chain with concatenated intermediates in root file and a key matching the client-facing
+// certificate's, GetChainAndKeyFromPEMFiles returns a chain representing the certificates
+// in the correct order, as well as said key.
+func TestPEMReadFilesConcatedCA(t *testing.T) {
+	filePaths := []string{
+		"test_data/concat/ca.pem",
+		"test_data/concat/cert.pem",
+		"test_data/concat/key.pem",
+	}
+
+	// Read and parse the files.
+	chain, key, err := GetChainAndKeyFromPEMFiles(filePaths)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check the chain length.
+	if chain.Len() != 5 {
+		t.Fatalf("Expected chain length to be 5, got: %d", chain.Len())
+	}
+
+	// Test that we got a key for the client-facing certificate.
+	if key == nil {
+		t.Fatal("Unexpected nil key")
+	}
+}
+
 // Tests that GetChainAndKeyFromPEMFiles returns an error if the chain is interrupted.
 func TestPEMInterrupted(t *testing.T) {
 	filePaths := []string{
-		"test_data/full_chain/ca.pem",
-		"test_data/full_chain/cert.pem",
+		"test_data/algorithms/rsa/ca.pem",
+		"test_data/algorithms/rsa/cert.pem",
 	}
 
 	// Read and parse the files.
@@ -71,8 +99,8 @@ func TestPEMInterrupted(t *testing.T) {
 func TestPEMMultipleChains(t *testing.T) {
 	filePaths := []string{
 		"test_data/multiple_chains/ca.pem",
-		"test_data/multiple_chains/intermediate-ca1.pem",
-		"test_data/multiple_chains/intermediate-ca2.pem",
+		"test_data/multiple_chains/chain-1-intermediate.pem",
+		"test_data/multiple_chains/chain-2-intermediate.pem",
 	}
 
 	// Read and parse the files.
@@ -89,8 +117,8 @@ func TestPEMMultipleChains(t *testing.T) {
 // public key for the client-facing certificate.
 func TestPEMMismatchingKey(t *testing.T) {
 	filePaths := []string{
-		"test_data/full_chain/cert.pem",
-		"test_data/multiple_chains/key-ca2.pem",
+		"test_data/algorithms/rsa/cert.pem",
+		"test_data/multiple_chains/chain-2-key.pem",
 	}
 
 	// Read and parse the files.
@@ -109,7 +137,7 @@ func TestPEMMismatchingKey(t *testing.T) {
 // public key among several keys.
 func TestPEMFindKeyForCert(t *testing.T) {
 	// Read the certificate's bytes.
-	certPath := "test_data/full_chain/cert.pem"
+	certPath := "test_data/algorithms/rsa/cert.pem"
 	certs := testReadCertsFromFiles(t, []string{certPath})
 
 	// Parse the bytes as an X509 certificate.
@@ -124,10 +152,10 @@ func TestPEMFindKeyForCert(t *testing.T) {
 	}
 
 	// Read private keys.
-	keys := make([]*rsa.PrivateKey, 0)
+	keys := make([]crypto.PrivateKey, 0)
 	keyPaths := []string{
-		"test_data/multiple_chains/key-ca2.pem",
-		"test_data/full_chain/key.pem",
+		"test_data/multiple_chains/chain-2-key.pem",
+		"test_data/algorithms/rsa/key.pem",
 	}
 	for _, path := range keyPaths {
 		// Read bytes from the key's file.
@@ -146,8 +174,8 @@ func TestPEMFindKeyForCert(t *testing.T) {
 		if len(rest) != 0 {
 			t.Fatal("More than one PEM block in file")
 		}
-		if bloc.Type != PEMBlockTypeRSAKey {
-			t.Fatalf("Expected PEM block to be RSA PRIVATE KEY, got: %s", bloc.Type)
+		if bloc.Type != PEMBlockTypeRSAKeyPKCS1 && bloc.Type != PEMBlockTypeKeyPKCS8 {
+			t.Fatalf("Expected PEM block to be RSA PRIVATE KEY or PRIVATE KEY, got: %s", bloc.Type)
 		}
 
 		// Parse the key from the block's bytes.
@@ -156,7 +184,7 @@ func TestPEMFindKeyForCert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		keys = append(keys, k)
+		keys = append(keys, crypto.PrivateKey(k))
 	}
 
 	// Test that we matched the correct key.
