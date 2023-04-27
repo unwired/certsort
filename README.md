@@ -1,3 +1,8 @@
+[![Go Report Card](https://goreportcard.com/badge/github.com/unwired/certsort)](https://goreportcard.com/report/github.com/unwired/certsort)
+[![GitHub issues](https://img.shields.io/github/issues/unwired/certsort.svg)](https://github.com/unwired/certsort/issues)
+[![Documentation](https://godoc.org/github.com/unwired/certsort?status.svg)](https://godoc.org/github.com/unwired/certsort)
+[![license](https://img.shields.io/github/license/unwired/certsort.svg)](https://github.com/unwired/certsort/blob/main/LICENSE)
+
 # Certificate sorting
 
 This library can read X509 certificates and private keys contained in a list of files,
