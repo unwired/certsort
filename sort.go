@@ -20,6 +20,7 @@ package certsort
 
 import (
 	"bytes"
+	"crypto/x509"
 	"fmt"
 )
 
@@ -40,7 +41,7 @@ var (
 )
 
 /*
-SortCertificates reads the provided PEM-encoded files, containing either X509
+SortCertificatesBuffer reads the provided PEM-encoded files, containing either X509
 certificates, or RSA private keys. It then sorts them into the output files specified
 by the given configuration string, as PEM blocks.
 
@@ -87,7 +88,7 @@ Instructs SortCertificates to create the following output buffers:
   - cert.pem: contains the client-facing certificate (mandatory).
   - private.pem: contains the private key for the client-facing certificate (mandatory).
 */
-func SortCertificates(cfg string, keys [][]byte) (map[string]*bytes.Buffer, error) {
+func SortCertificatesBuffer(cfg string, keys [][]byte) (map[string]*bytes.Buffer, error) {
 	// Parse the configuration string.
 	outFiles, err := parseConfigurationString(cfg)
 	if err != nil {
@@ -104,7 +105,7 @@ func SortCertificates(cfg string, keys [][]byte) (map[string]*bytes.Buffer, erro
 	// Write the contents of the output files.
 	for _, file := range outFiles {
 		var buf *bytes.Buffer
-		if buf, err = writeToBufferSorted(file, chain, pkey); err != nil {
+		if buf, err = writeToBufferSortedWithFileConfig(file, chain, pkey); err != nil {
 			return nil, fmt.Errorf("error for output file %s: %v", file.Name, err)
 		}
 		result[file.Name] = buf
@@ -118,17 +119,17 @@ func SortCertificates(cfg string, keys [][]byte) (map[string]*bytes.Buffer, erro
 SortCertificateFiles reads files from the given file paths, sorts them with SortCertificates
 and writes them into the outDir based on the given configuration.
 
-Please refer to [SortCertificates] for more details.
+Please refer to [sortCertificatesBuffer] for more details.
 */
 func SortCertificateFiles(cfg string, files []string, outDir string) error {
 	keys, err := readFiles(files)
 	if err != nil {
-		return nil
+		return err
 	}
 
-	fileKeyBuffers, err := SortCertificates(cfg, keys)
+	fileKeyBuffers, err := SortCertificatesBuffer(cfg, keys)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	if err := writeFiles(outDir, fileKeyBuffers); err != nil {
@@ -136,4 +137,44 @@ func SortCertificateFiles(cfg string, files []string, outDir string) error {
 	}
 
 	return nil
+}
+
+// SortCertificates reads the provided PEM-encoded strings, containing either X509
+// certificates, or RSA private keys. It then sorts them according to the given sort direction.
+// Returns the sorted certificates and the private key for the furthest leaf of the certificate chain.
+// If no private key could be found for the client-facing certificate, or if no
+// client-facing certificate exists in the chain, returns a nil key.
+func SortCertificates(certs rawCerts, rootToLeaf bool) (sortedCerts string, privateKey *string, err error) {
+	// Read the certificates and keys from files.
+	chain, pKey, err := GetChainAndKeyFromRawPEM(certs.ByteArray())
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to get chain and key from raw pem: %w", err)
+	}
+
+	if pKey != nil {
+		buf := bytes.NewBuffer(nil)
+		// No matter what the original key type was, we'll encode it as PKCS#8 for now.
+		blockType := PEMBlockTypeKeyPKCS8
+		bytes, err := x509.MarshalPKCS8PrivateKey(pKey)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to marshal pkcs8 private key: %w", err)
+		}
+
+		err = writeToBufferAsPEM(buf, bytes, blockType)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to write private key to buffer: %w", err)
+		}
+		keyString := buf.String()
+		pKey = &keyString
+	}
+
+	if rootToLeaf {
+		sortedCerts, err = flattenFromRootToLeaf(chain)
+	} else {
+		sortedCerts, err = flattenFromLeafToRoot(chain)
+	}
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to flatten chain: %w", err)
+	}
+	return
 }
