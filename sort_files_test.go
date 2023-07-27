@@ -425,7 +425,7 @@ func TestWriteFileClientKeyMissingMandatory(t *testing.T) {
 // Tests that SortCertificates correctly sorts certificates accordingly with the provided
 // input string.
 // Tests different supported algorithms.
-func TestSortCertificates(t *testing.T) {
+func TestSortCertificatesFiles(t *testing.T) {
 	// Define the configuration string and files.
 	config := "root.pem:ca_root!;intermediate.pem:ca_intermediates_root_to_leaf!;cert.pem:cert!;key.pem:private_key!"
 
@@ -478,7 +478,7 @@ func TestSortCertificates(t *testing.T) {
 // Tests that SortCertificates correctly sorts certificates accordingly with the provided
 // input string and checks if the order within a file is always correct.
 // This ensures that the sorting is deterministic.
-func TestSortCertificatesOrder(t *testing.T) {
+func TestSortCertificatesFilesVerifyOrder(t *testing.T) {
 	// Define the configuration string and files.
 	config := "ca.pem:ca_root!,ca_intermediates_root_to_leaf!;cert.pem:cert!;key.pem:private_key!"
 	files := []string{
@@ -519,10 +519,10 @@ func TestSortCertificatesOrder(t *testing.T) {
 	}
 }
 
-// Tests that SortCertificates correctly sorts certificates accordingly with the provided
-// input string and checks if the order within a file is always correct.
-// This ensures that the sorting is deterministic.
-func TestSortCertificatesInterrupted(t *testing.T) {
+// Tests that SortCertificatesFiles correctly sorts certificates accordingly with the
+// provided input string and checks if the order within a file is always correct.
+// It should work with concatenated root CA files and without client certificate.
+func TestSortCertificatesWithoutClientCert(t *testing.T) {
 	// Define the configuration string and files.
 	config := "ca.pem:ca_root!,ca_intermediates_root_to_leaf"
 	files := []string{
