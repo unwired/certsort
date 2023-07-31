@@ -46,7 +46,7 @@ func SortCertificates(certs rawCerts, rootToLeaf bool) (sortedCerts string, priv
 			return "", nil, fmt.Errorf("failed to write private key to buffer: %w", err)
 		}
 		keyString := buf.String()
-		pKey = &keyString
+		privateKey = &keyString
 	}
 
 	if rootToLeaf {
