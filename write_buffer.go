@@ -23,12 +23,12 @@ import (
 	"fmt"
 )
 
-// writeToBufferSorted writes the configured content into a given output file.
+// writeToBufferSortedWithFileConfig writes the configured content into a given output file.
 // Returns ErrMissingRootCA, ErrMissingIntermediateCA, ErrMissingClientCert or
 // ErrMissingPrivateKey if one of the content tags mandated specific certificate(s) or
 // key to be included in the output file, but no such certificate or key could be found.
 // All key algorithms will be rewritten as PKCS#8 PEM blocks.
-func writeToBufferSorted(
+func writeToBufferSortedWithFileConfig(
 	file *OutputFileConfig,
 	chain *CertChain,
 	pkey crypto.PrivateKey,
@@ -173,4 +173,52 @@ func writeToBufferAsPEM(buf *bytes.Buffer, b []byte, blockType string) error {
 		Bytes:   b,
 	}
 	return pem.Encode(buf, block)
+}
+
+func flattenFromRootToLeaf(chain *CertChain) (string, error) {
+	buf := bytes.NewBuffer(nil)
+	current := chain.Root
+	for current != nil {
+		writeCertToBuffer(current, buf)
+		current = current.Leaf
+	}
+	return buf.String(), nil
+}
+
+func flattenFromLeafToRoot(chain *CertChain) (string, error) {
+	buf := bytes.NewBuffer(nil)
+	current := chain.FurthestLeaf
+	for current != nil {
+		current = current.Parent
+		writeCertToBuffer(current, buf)
+	}
+
+	return buf.String(), nil
+}
+
+// writeCertToBuffer writes the certificate to the buffer.
+// this is the simplified version of writeToBufferSortedWithFileConfig.
+// without any configuration, it will write all certificates to the buffer.
+func writeCertToBuffer(current *Certificate, buf *bytes.Buffer) error {
+	if current.Type == CertTypeRootCA {
+		err := writeToBufferAsPEM(
+			buf, current.Bytes(), PEMBlockTypeCertificate,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to write root ca to buffer: %w", err)
+		}
+	}
+	if current.Type == CertTypeIntermediateCA {
+		err := writeToBufferAsPEM(buf, current.Bytes(), PEMBlockTypeCertificate)
+		if err != nil {
+			return fmt.Errorf("failed to write intermediate ca to buffer: %w", err)
+		}
+	}
+	if current.Type == CertTypeClientCert {
+		err := writeToBufferAsPEM(buf, current.Bytes(), PEMBlockTypeCertificate)
+		if err != nil {
+			return fmt.Errorf("failed to write client cert to buffer: %w", err)
+		}
+	}
+	return nil
 }

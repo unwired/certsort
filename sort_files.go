@@ -40,7 +40,7 @@ var (
 )
 
 /*
-SortCertificates reads the provided PEM-encoded files, containing either X509
+SortCertificatesBuffer reads the provided PEM-encoded files, containing either X509
 certificates, or RSA private keys. It then sorts them into the output files specified
 by the given configuration string, as PEM blocks.
 
@@ -87,7 +87,7 @@ Instructs SortCertificates to create the following output buffers:
   - cert.pem: contains the client-facing certificate (mandatory).
   - private.pem: contains the private key for the client-facing certificate (mandatory).
 */
-func SortCertificates(cfg string, keys [][]byte) (map[string]*bytes.Buffer, error) {
+func SortCertificatesBuffer(cfg string, keys [][]byte) (map[string]*bytes.Buffer, error) {
 	// Parse the configuration string.
 	outFiles, err := parseConfigurationString(cfg)
 	if err != nil {
@@ -104,7 +104,7 @@ func SortCertificates(cfg string, keys [][]byte) (map[string]*bytes.Buffer, erro
 	// Write the contents of the output files.
 	for _, file := range outFiles {
 		var buf *bytes.Buffer
-		if buf, err = writeToBufferSorted(file, chain, pkey); err != nil {
+		if buf, err = writeToBufferSortedWithFileConfig(file, chain, pkey); err != nil {
 			return nil, fmt.Errorf("error for output file %s: %v", file.Name, err)
 		}
 		result[file.Name] = buf
@@ -118,17 +118,17 @@ func SortCertificates(cfg string, keys [][]byte) (map[string]*bytes.Buffer, erro
 SortCertificateFiles reads files from the given file paths, sorts them with SortCertificates
 and writes them into the outDir based on the given configuration.
 
-Please refer to [SortCertificates] for more details.
+Please refer to [sortCertificatesBuffer] for more details.
 */
 func SortCertificateFiles(cfg string, files []string, outDir string) error {
 	keys, err := readFiles(files)
 	if err != nil {
-		return nil
+		return err
 	}
 
-	fileKeyBuffers, err := SortCertificates(cfg, keys)
+	fileKeyBuffers, err := SortCertificatesBuffer(cfg, keys)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	if err := writeFiles(outDir, fileKeyBuffers); err != nil {

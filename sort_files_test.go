@@ -186,7 +186,7 @@ func TestWriteFileRootCA(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf, err := writeToBufferSorted(cfg, chain, key)
+	buf, err := writeToBufferSortedWithFileConfig(cfg, chain, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestWriteFileRootCAMissingMandatory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err = writeToBufferSorted(cfg, chain, key); err != ErrMissingRootCA {
+	if _, err = writeToBufferSortedWithFileConfig(cfg, chain, key); err != ErrMissingRootCA {
 		t.Fatalf("Expected error: %v\nGot: %v", ErrMissingRootCA, err)
 	}
 }
@@ -249,7 +249,7 @@ func TestWriteFileIntermediateCA(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf, err := writeToBufferSorted(cfg, chain, key)
+	buf, err := writeToBufferSortedWithFileConfig(cfg, chain, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestWriteFileIntermediateCAMissingMandatory(t *testing.T) {
 	}
 
 	// Attempt to write the file, and check that an error is returned.
-	if _, err := writeToBufferSorted(cfg, chain, key); err != ErrMissingIntermediateCA {
+	if _, err := writeToBufferSortedWithFileConfig(cfg, chain, key); err != ErrMissingIntermediateCA {
 		t.Fatalf("Expected error: %v\nGot: %v", ErrMissingIntermediateCA, err)
 	}
 }
@@ -315,7 +315,7 @@ func TestWriteFileClientCert(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf, err := writeToBufferSorted(cfg, chain, key)
+	buf, err := writeToBufferSortedWithFileConfig(cfg, chain, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +350,7 @@ func TestWriteFileClientCertMissingMandatory(t *testing.T) {
 
 	// Attempt to write the file, and check that an error is returned.
 
-	if _, err = writeToBufferSorted(cfg, chain, key); err != ErrMissingClientCert {
+	if _, err = writeToBufferSortedWithFileConfig(cfg, chain, key); err != ErrMissingClientCert {
 		t.Fatalf("Expected error: %v\nGot: %v", ErrMissingClientCert, err)
 	}
 }
@@ -381,7 +381,7 @@ func TestWriteFileClientKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf, err := writeToBufferSorted(cfg, chain, key)
+	buf, err := writeToBufferSortedWithFileConfig(cfg, chain, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +417,7 @@ func TestWriteFileClientKeyMissingMandatory(t *testing.T) {
 
 	// Attempt to write the file, and check that an error is returned.
 
-	if _, err = writeToBufferSorted(cfg, chain, key); err != ErrMissingPrivateKey {
+	if _, err = writeToBufferSortedWithFileConfig(cfg, chain, key); err != ErrMissingPrivateKey {
 		t.Fatalf("Expected error: %v\nGot: %v", ErrMissingPrivateKey, err)
 	}
 }
@@ -425,7 +425,7 @@ func TestWriteFileClientKeyMissingMandatory(t *testing.T) {
 // Tests that SortCertificates correctly sorts certificates accordingly with the provided
 // input string.
 // Tests different supported algorithms.
-func TestSortCertificates(t *testing.T) {
+func TestSortCertificatesFiles(t *testing.T) {
 	// Define the configuration string and files.
 	config := "root.pem:ca_root!;intermediate.pem:ca_intermediates_root_to_leaf!;cert.pem:cert!;key.pem:private_key!"
 
@@ -478,7 +478,7 @@ func TestSortCertificates(t *testing.T) {
 // Tests that SortCertificates correctly sorts certificates accordingly with the provided
 // input string and checks if the order within a file is always correct.
 // This ensures that the sorting is deterministic.
-func TestSortCertificatesOrder(t *testing.T) {
+func TestSortCertificatesFilesVerifyOrder(t *testing.T) {
 	// Define the configuration string and files.
 	config := "ca.pem:ca_root!,ca_intermediates_root_to_leaf!;cert.pem:cert!;key.pem:private_key!"
 	files := []string{
@@ -516,6 +516,29 @@ func TestSortCertificatesOrder(t *testing.T) {
 	}
 	if tries != matches {
 		t.Errorf("ordering is wrong in %v of %v tries", tries-matches, tries)
+	}
+}
+
+// Tests that SortCertificatesFiles correctly sorts certificates accordingly with the
+// provided input string and checks if the order within a file is always correct.
+// It should work with concatenated root CA files and without client certificate.
+func TestSortCertificatesWithoutClientCert(t *testing.T) {
+	// Define the configuration string and files.
+	config := "ca.pem:ca_root!,ca_intermediates_root_to_leaf"
+	files := []string{
+		"test_data/algorithms/rsa/ca.pem",
+	}
+
+	outputDir := t.TempDir()
+
+	// Sort the files.
+	if err := SortCertificateFiles(config, files, outputDir); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := os.ReadFile(path.Join(outputDir, "ca.pem"))
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
