@@ -22,8 +22,9 @@ func (r rawCerts) ByteArray() [][]byte {
 	return result
 }
 
-func (r rawCerts) Append(cert ...string) {
+func (r rawCerts) Append(cert ...string) rawCerts {
 	for _, c := range cert {
 		r = append(r, []byte(c))
 	}
+	return r
 }
