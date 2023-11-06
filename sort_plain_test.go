@@ -50,6 +50,21 @@ func TestCertificateSort(t *testing.T) {
 	}
 }
 
+func TestInvalidCaOnly(t *testing.T) {
+	certs := NewRawCerts("invalid ca")
+
+	sortedCerts, key, err := SortCertificates(certs, true)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %s", err)
+	}
+	if len(sortedCerts) != 0 {
+		t.Fatalf("Expected chain length to be 0, got: %d", len(sortedCerts))
+	}
+	if key != nil {
+		t.Fatal("Key was expected to be nil")
+	}
+}
+
 func TestCertificatesWithInvalidCert(t *testing.T) {
 	rawKeys, err := readFiles(filePaths)
 	if err != nil {
