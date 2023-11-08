@@ -131,7 +131,7 @@ func GetChainAndKeyFromRawPEM(
 	}
 
 	// If there is a client-facing certificate, try to find its key.
-	if chain.FurthestLeaf.Type == CertTypeClientCert {
+	if chain.FurthestLeaf != nil && chain.FurthestLeaf.Type == CertTypeClientCert {
 		clientKey = FindKeyForCertificate(chain.FurthestLeaf, keys)
 	}
 	return
